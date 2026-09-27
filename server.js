@@ -79,6 +79,36 @@ app.post('/verify-otp', (req, res) => {
   res.json({ valid: true });
 });
 
+// --- Username directory (so customers can find each other) ---
+// In-memory — swap for a real database before going live, so usernames
+// survive a server restart/redeploy.
+const usernames = new Map(); // username -> { name }
+
+app.get('/check-username', (req, res) => {
+  const u = String(req.query.u || '').toLowerCase();
+  res.json({ available: !usernames.has(u) });
+});
+
+app.post('/register-user', (req, res) => {
+  const { username, name } = req.body;
+  const u = String(username || '').toLowerCase();
+  if (!/^[a-z0-9_]{3,20}$/.test(u)) return res.status(400).json({ ok: false, error: 'Invalid username' });
+  if (usernames.has(u)) return res.status(409).json({ ok: false, error: 'Username taken' });
+  usernames.set(u, { name: name || u });
+  res.json({ ok: true });
+});
+
+app.get('/search-users', (req, res) => {
+  const q = String(req.query.q || '').toLowerCase();
+  if (q.length < 2) return res.json({ users: [] });
+  const results = [];
+  for (const [username, info] of usernames.entries()) {
+    if (username.includes(q)) results.push({ username, name: info.name });
+    if (results.length >= 20) break;
+  }
+  res.json({ users: results });
+});
+
 const SMEPAY_BASE =
   SMEPAY_MODE === 'production'
     ? 'https://api.smepay.in'
